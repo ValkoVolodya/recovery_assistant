@@ -32,4 +32,5 @@ services:
 
 databases:
   - name: recovery-assistant-db
+    diskSizeGB: 1
     plan: basic-256mb
