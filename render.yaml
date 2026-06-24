@@ -19,6 +19,8 @@ services:
           property: connectionString
       - key: BOT_TOKEN
         sync: false
+      - key: BOT_USERNAME
+        sync: false
       - key: APP_BASE_URL
         sync: false
       - key: STRAVA_CLIENT_ID

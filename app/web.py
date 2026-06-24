@@ -20,7 +20,7 @@ def create_app(runtime: AppRuntime) -> FastAPI:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return RedirectResponse(connect_url)
 
-    @app.get("/strava/oauth/callback")
+    @app.get("/strava/oauth/callback", response_model=None)
     async def strava_oauth_callback(
         code: str | None = None,
         scope: str | None = None,
