@@ -32,4 +32,4 @@ services:
 
 databases:
   - name: recovery-assistant-db
-    plan: starter
+    plan: basic-256mb
