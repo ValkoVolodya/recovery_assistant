@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     bot_token: str
+    bot_username: str | None = None
     database_url: str
     app_base_url: str | None = None
     app_host: str = "0.0.0.0"

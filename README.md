@@ -119,6 +119,7 @@ Set these values in `.env`:
 
 ```bash
 BOT_TOKEN=your-telegram-bot-token
+BOT_USERNAME=your_telegram_bot_username
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/recovery_assistant
 APP_BASE_URL=https://your-public-app-url.example
 APP_HOST=0.0.0.0
@@ -159,6 +160,7 @@ Before deploying on Render:
 2. Create the stack from Blueprint or sync the YAML in Render.
 3. Set these env vars in Render:
    - `BOT_TOKEN`
+   - `BOT_USERNAME`
    - `APP_BASE_URL`
    - `STRAVA_CLIENT_ID`
    - `STRAVA_CLIENT_SECRET`
@@ -167,6 +169,7 @@ Before deploying on Render:
 4. Keep `APP_HOST=0.0.0.0`.
 5. Let Render provide the port via `APP_PORT=10000` from `render.yaml`.
 6. After the first deploy, update Strava callback settings to the actual Render URL.
+7. If `BOT_USERNAME` is set, successful Strava OAuth redirects back to `https://t.me/<bot_username>`.
 
 Notes for Render:
 

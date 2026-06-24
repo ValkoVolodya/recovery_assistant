@@ -26,7 +26,7 @@ def create_app(runtime: AppRuntime) -> FastAPI:
         scope: str | None = None,
         state: str | None = None,
         error: str | None = None,
-    ) -> dict[str, str]:
+    ) -> RedirectResponse | dict[str, str]:
         if error is not None:
             raise HTTPException(status_code=400, detail=f"Strava OAuth error: {error}")
         if code is None or state is None:
@@ -43,6 +43,10 @@ def create_app(runtime: AppRuntime) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Strava connection failed: {exc}") from exc
+
+        bot_username = runtime.settings.bot_username
+        if bot_username:
+            return RedirectResponse(f"https://t.me/{bot_username}", status_code=302)
         return {"status": "connected", "message": "Strava connected. You can return to Telegram."}
 
     @app.get("/strava/webhook")
