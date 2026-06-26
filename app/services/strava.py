@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+import logging
 from urllib.parse import urlencode
 
 import httpx
@@ -18,6 +19,9 @@ from app.services.app_services import WorkoutService
 STRAVA_OAUTH_URL = "https://www.strava.com/oauth/authorize"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
 STRAVA_API_BASE_URL = "https://www.strava.com/api/v3"
+ACCESS_TOKEN_REFRESH_BUFFER = timedelta(minutes=5)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -119,6 +123,7 @@ class StravaService:
         return self._client.build_connect_url(telegram_user_id)
 
     async def connect_athlete(self, code: str, telegram_user_id: int) -> None:
+        logger.info("Exchanging Strava OAuth code for telegram_user_id=%s", telegram_user_id)
         token_payload = await self._client.exchange_code(code)
         athlete = token_payload.get("athlete") or {}
         athlete_id = athlete.get("id")
@@ -142,57 +147,126 @@ class StravaService:
                 expires_at=expires_at,
             )
             await session.commit()
+            logger.info(
+                "Stored Strava connection for telegram_user_id=%s athlete_id=%s expires_at=%s",
+                telegram_user_id,
+                athlete_id,
+                expires_at.isoformat(),
+            )
 
     async def process_webhook_event(self, payload: dict) -> None:
-        event = self._parse_event(payload)
-        if event.object_type != "activity" or event.aspect_type != "create":
-            return
-
-        async with self._session_factory() as session:
-            connection_repo = StravaConnectionRepository(session)
-            workout_repo = WorkoutRepository(session)
-            user_repo = UserRepository(session)
-
-            existing_workout = await workout_repo.get_by_provider_activity_id(event.object_id)
-            if existing_workout is not None:
-                return
-
-            connection = await connection_repo.get_by_athlete_id(event.owner_id)
-            if connection is None:
-                return
-
-            access_token = connection.access_token
-            if connection.expires_at <= datetime.now(tz=UTC):
-                token_payload = await self._client.refresh_access_token(connection.refresh_token)
-                connection = await connection_repo.upsert_connection(
-                    user_id=connection.user_id,
-                    athlete_id=connection.strava_athlete_id,
-                    access_token=token_payload["access_token"],
-                    refresh_token=token_payload["refresh_token"],
-                    expires_at=datetime.fromtimestamp(token_payload["expires_at"], tz=UTC),
-                )
-                await session.commit()
-                access_token = connection.access_token
-
-            activity = await self._client.get_activity(access_token, event.object_id)
-            user = await user_repo.get_by_id(connection.user_id)
-            if user is None:
-                return
-
-            workout_input = self._map_activity_to_workout(activity)
-            await self._workout_service.log_workout(
-                telegram_user_id=user.telegram_user_id,
-                username=user.username,
-                first_name=user.first_name,
-                workout_input=workout_input,
-                provider_activity_id=event.object_id,
+        try:
+            event = self._parse_event(payload)
+            logger.info(
+                "Received Strava webhook object_type=%s aspect_type=%s owner_id=%s object_id=%s",
+                event.object_type,
+                event.aspect_type,
+                event.owner_id,
+                event.object_id,
             )
+            if event.object_type != "activity" or event.aspect_type != "create":
+                logger.info("Ignoring unsupported Strava webhook event payload=%s", payload)
+                return
+
+            async with self._session_factory() as session:
+                connection_repo = StravaConnectionRepository(session)
+                workout_repo = WorkoutRepository(session)
+                user_repo = UserRepository(session)
+
+                existing_workout = await workout_repo.get_by_provider_activity_id(event.object_id)
+                if existing_workout is not None:
+                    logger.info("Skipping duplicate Strava activity object_id=%s", event.object_id)
+                    return
+
+                connection = await connection_repo.get_by_athlete_id(event.owner_id)
+                if connection is None:
+                    logger.warning("No Strava connection found for athlete_id=%s", event.owner_id)
+                    return
+
+                access_token, connection = await self._ensure_fresh_access_token(connection_repo, connection, session)
+                try:
+                    activity = await self._client.get_activity(access_token, event.object_id)
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code not in {401, 403}:
+                        raise
+                    logger.warning(
+                        "Strava activity fetch unauthorized for athlete_id=%s object_id=%s, forcing token refresh",
+                        event.owner_id,
+                        event.object_id,
+                    )
+                    access_token, connection = await self._refresh_connection_tokens(
+                        connection_repo,
+                        connection,
+                        session,
+                    )
+                    activity = await self._client.get_activity(access_token, event.object_id)
+
+                user = await user_repo.get_by_id(connection.user_id)
+                if user is None:
+                    logger.warning("User not found for Strava connection user_id=%s", connection.user_id)
+                    return
+
+                workout_input = self._map_activity_to_workout(activity)
+                await self._workout_service.log_workout(
+                    telegram_user_id=user.telegram_user_id,
+                    username=user.username,
+                    first_name=user.first_name,
+                    workout_input=workout_input,
+                    provider_activity_id=event.object_id,
+                )
+                logger.info(
+                    "Stored workout from Strava athlete_id=%s object_id=%s telegram_user_id=%s",
+                    event.owner_id,
+                    event.object_id,
+                    user.telegram_user_id,
+                )
+        except Exception:
+            logger.exception("Failed to process Strava webhook payload=%s", payload)
+            raise
 
     def verify_webhook(self, mode: str, token: str, challenge: str) -> dict[str, str]:
         expected_token = self._settings.strava_verify_token
         if mode != "subscribe" or expected_token is None or token != expected_token:
             raise ValueError("Invalid Strava webhook verification request")
         return {"hub.challenge": challenge}
+
+    async def _ensure_fresh_access_token(
+        self,
+        connection_repo: StravaConnectionRepository,
+        connection,
+        session: AsyncSession,
+    ) -> tuple[str, object]:
+        refresh_deadline = datetime.now(tz=UTC) + ACCESS_TOKEN_REFRESH_BUFFER
+        if connection.expires_at <= refresh_deadline:
+            logger.info(
+                "Refreshing Strava access token for athlete_id=%s expires_at=%s",
+                connection.strava_athlete_id,
+                connection.expires_at.isoformat(),
+            )
+            return await self._refresh_connection_tokens(connection_repo, connection, session)
+        return connection.access_token, connection
+
+    async def _refresh_connection_tokens(
+        self,
+        connection_repo: StravaConnectionRepository,
+        connection,
+        session: AsyncSession,
+    ) -> tuple[str, object]:
+        token_payload = await self._client.refresh_access_token(connection.refresh_token)
+        connection = await connection_repo.upsert_connection(
+            user_id=connection.user_id,
+            athlete_id=connection.strava_athlete_id,
+            access_token=token_payload["access_token"],
+            refresh_token=token_payload["refresh_token"],
+            expires_at=datetime.fromtimestamp(token_payload["expires_at"], tz=UTC),
+        )
+        await session.commit()
+        logger.info(
+            "Refreshed Strava token for athlete_id=%s new_expires_at=%s",
+            connection.strava_athlete_id,
+            connection.expires_at.isoformat(),
+        )
+        return connection.access_token, connection
 
     def _map_activity_to_workout(self, activity: dict) -> WorkoutInput:
         moving_time_seconds = int(activity.get("moving_time") or 0)

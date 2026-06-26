@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
 from app.runtime import AppRuntime
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(runtime: AppRuntime) -> FastAPI:
@@ -67,6 +71,7 @@ def create_app(runtime: AppRuntime) -> FastAPI:
     @app.post("/strava/webhook")
     async def strava_webhook_ingest(request: Request, background_tasks: BackgroundTasks) -> dict[str, str]:
         payload = await request.json()
+        logger.info("Accepted Strava webhook payload=%s", payload)
         background_tasks.add_task(runtime.strava_service.process_webhook_event, payload)
         return {"status": "accepted"}
 
