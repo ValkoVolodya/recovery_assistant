@@ -5,10 +5,14 @@ from datetime import UTC, datetime, timedelta
 import logging
 from urllib.parse import urlencode
 
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
+from app.db.models import StravaConnection
 from app.domain.enums import Intensity
 from app.dto.workout import WorkoutInput
 from app.repositories.strava_connections import StravaConnectionRepository
@@ -33,6 +37,13 @@ class StravaWebhookEvent:
     owner_id: int
     subscription_id: int
     updates: dict[str, str] | None = None
+
+
+@dataclass
+class StravaConnectionStatus:
+    connected: bool
+    needs_reconnect: bool
+    message: str
 
 
 class StravaClient:
@@ -122,6 +133,49 @@ class StravaService:
     def build_connect_url(self, telegram_user_id: int) -> str:
         return self._client.build_connect_url(telegram_user_id)
 
+    async def get_connection_status(self, telegram_user_id: int) -> StravaConnectionStatus:
+        async with self._session_factory() as session:
+            user_repo = UserRepository(session)
+            connection_repo = StravaConnectionRepository(session)
+
+            user = await user_repo.get_by_telegram_user_id(telegram_user_id)
+            if user is None:
+                return StravaConnectionStatus(
+                    connected=False,
+                    needs_reconnect=True,
+                    message="Спочатку виконай /start, а потім підключай Strava.",
+                )
+
+            connection = await connection_repo.get_by_user_id(user.id)
+            if connection is None:
+                return StravaConnectionStatus(
+                    connected=False,
+                    needs_reconnect=True,
+                    message="Strava ще не підключена.",
+                )
+
+            try:
+                _, refreshed_connection = await self._ensure_fresh_access_token(connection_repo, connection, session)
+            except Exception:
+                logger.exception(
+                    "Failed to validate Strava connection for telegram_user_id=%s; reconnect required",
+                    telegram_user_id,
+                )
+                return StravaConnectionStatus(
+                    connected=False,
+                    needs_reconnect=True,
+                    message="Схоже, Strava треба перепідключити.",
+                )
+
+            return StravaConnectionStatus(
+                connected=True,
+                needs_reconnect=False,
+                message=(
+                    "Strava вже підключена. "
+                    f"Токен дійсний до {refreshed_connection.expires_at.astimezone(UTC).strftime('%Y-%m-%d %H:%M UTC')}."
+                ),
+            )
+
     async def connect_athlete(self, code: str, telegram_user_id: int) -> None:
         logger.info("Exchanging Strava OAuth code for telegram_user_id=%s", telegram_user_id)
         token_payload = await self._client.exchange_code(code)
@@ -153,6 +207,10 @@ class StravaService:
                 athlete_id,
                 expires_at.isoformat(),
             )
+        await self._notify_telegram_user(
+            telegram_user_id,
+            "Strava успішно підключена. Можна їхати катати, наступне тренування підтягнеться автоматично.",
+        )
 
     async def process_webhook_event(self, payload: dict) -> None:
         try:
@@ -233,9 +291,9 @@ class StravaService:
     async def _ensure_fresh_access_token(
         self,
         connection_repo: StravaConnectionRepository,
-        connection,
+        connection: StravaConnection,
         session: AsyncSession,
-    ) -> tuple[str, object]:
+    ) -> tuple[str, StravaConnection]:
         refresh_deadline = datetime.now(tz=UTC) + ACCESS_TOKEN_REFRESH_BUFFER
         if connection.expires_at <= refresh_deadline:
             logger.info(
@@ -249,9 +307,9 @@ class StravaService:
     async def _refresh_connection_tokens(
         self,
         connection_repo: StravaConnectionRepository,
-        connection,
+        connection: StravaConnection,
         session: AsyncSession,
-    ) -> tuple[str, object]:
+    ) -> tuple[str, StravaConnection]:
         token_payload = await self._client.refresh_access_token(connection.refresh_token)
         connection = await connection_repo.upsert_connection(
             user_id=connection.user_id,
@@ -267,6 +325,18 @@ class StravaService:
             connection.expires_at.isoformat(),
         )
         return connection.access_token, connection
+
+    async def _notify_telegram_user(self, telegram_user_id: int, text: str) -> None:
+        bot = Bot(
+            token=self._settings.bot_token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        try:
+            await bot.send_message(chat_id=telegram_user_id, text=text)
+        except Exception:
+            logger.exception("Failed to send Telegram message to telegram_user_id=%s", telegram_user_id)
+        finally:
+            await bot.session.close()
 
     def _map_activity_to_workout(self, activity: dict) -> WorkoutInput:
         moving_time_seconds = int(activity.get("moving_time") or 0)

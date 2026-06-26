@@ -17,8 +17,14 @@ async def connect_strava_command(message: Message, strava_service: StravaService
         await message.answer("Strava ще не налаштована. Спочатку заповніть Strava змінні в .env.")
         return
 
+    status = await strava_service.get_connection_status(telegram_user.id)
+    if status.connected:
+        await message.answer(status.message)
+        return
+
     connect_url = strava_service.build_connect_url(telegram_user.id)
     await message.answer(
+        f"{status.message}\n\n"
         "Відкрий це посилання, авторизуй Strava і повернись у бот:\n"
         f"{connect_url}"
     )
