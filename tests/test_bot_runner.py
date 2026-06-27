@@ -3,7 +3,6 @@ import sys
 import types
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
 
 
 def _load_bot_runner():
@@ -13,38 +12,33 @@ def _load_bot_runner():
     sys.modules["aiogram.enums"] = types.SimpleNamespace(ParseMode=types.SimpleNamespace(HTML="HTML"))
     sys.modules["aiogram.fsm.storage.memory"] = types.SimpleNamespace(MemoryStorage=object)
     sys.modules["app.bot.router"] = types.SimpleNamespace(build_router=lambda: object())
-    sys.modules["app.runtime"] = types.SimpleNamespace(AppRuntime=object)
     return importlib.import_module("app.bot.runner")
 
 
-class RunBotTests(unittest.IsolatedAsyncioTestCase):
-    async def test_run_bot_deletes_webhook_before_polling(self) -> None:
+class TelegramWebhookTests(unittest.IsolatedAsyncioTestCase):
+    async def test_ensure_telegram_webhook_sets_expected_url(self) -> None:
         runner = _load_bot_runner()
-        calls: list[str] = []
+        calls: list[tuple[str, object]] = []
 
         class FakeBot:
-            def __init__(self, token: str, default: object) -> None:
-                self.token = token
-                self.default = default
-                self.session = SimpleNamespace(close=self._close)
+            async def set_webhook(self, *, url: str, allowed_updates: list[str]) -> None:
+                calls.append((url, allowed_updates))
 
-            async def delete_webhook(self, drop_pending_updates: bool) -> None:
-                calls.append(f"delete:{drop_pending_updates}")
+        runtime = SimpleNamespace(settings=SimpleNamespace(app_base_url="https://example.com"))
+        bot_runtime = SimpleNamespace(
+            bot=FakeBot(),
+            dispatcher=SimpleNamespace(resolve_used_update_types=lambda: ["message", "callback_query"]),
+        )
 
-            async def _close(self) -> None:
-                calls.append("close")
+        await runner.ensure_telegram_webhook(bot_runtime, runtime)
 
-        class FakeDispatcher:
-            async def start_polling(self, bot: object) -> None:
-                calls.append("poll")
+        self.assertEqual(
+            calls,
+            [("https://example.com/telegram/webhook", ["message", "callback_query"])],
+        )
 
-        runtime = SimpleNamespace(settings=SimpleNamespace(bot_token="token"))
+    def test_get_telegram_webhook_url_rejects_missing_base_url(self) -> None:
+        runner = _load_bot_runner()
 
-        with (
-            patch.object(runner, "Bot", FakeBot),
-            patch.object(runner, "DefaultBotProperties", side_effect=lambda **kwargs: kwargs),
-            patch.object(runner, "build_dispatcher", return_value=FakeDispatcher()),
-        ):
-            await runner.run_bot(runtime)
-
-        self.assertEqual(calls, ["delete:False", "poll", "close"])
+        with self.assertRaisesRegex(RuntimeError, "APP_BASE_URL is required"):
+            runner.get_telegram_webhook_url(None)

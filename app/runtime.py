@@ -1,7 +1,9 @@
 from dataclasses import dataclass
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.bot.runner import TelegramBotRuntime, build_bot_runtime
 from app.config import Settings, get_settings
 from app.db.session import create_engine, create_session_factory
 from app.services.app_services import ProfileService, WorkoutService
@@ -17,6 +19,7 @@ class AppRuntime:
     profile_service: ProfileService
     workout_service: WorkoutService
     strava_service: StravaService
+    telegram: Optional[TelegramBotRuntime]
 
 
 def build_runtime() -> AppRuntime:
@@ -27,11 +30,14 @@ def build_runtime() -> AppRuntime:
     profile_service = ProfileService(session_factory)
     workout_service = WorkoutService(session_factory, recommendation_service)
     strava_service = StravaService(settings, session_factory, workout_service)
-    return AppRuntime(
+    runtime = AppRuntime(
         settings=settings,
         engine=engine,
         session_factory=session_factory,
         profile_service=profile_service,
         workout_service=workout_service,
         strava_service=strava_service,
+        telegram=None,  # type: ignore[arg-type]
     )
+    runtime.telegram = build_bot_runtime(runtime)
+    return runtime

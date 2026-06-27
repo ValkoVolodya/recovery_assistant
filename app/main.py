@@ -3,7 +3,7 @@ import logging
 
 import uvicorn
 
-from app.bot.runner import run_bot
+from app.bot.runner import close_bot, ensure_telegram_webhook_with_retry
 from app.logging_config import configure_logging
 from app.runtime import build_runtime
 from app.web import create_app
@@ -22,30 +22,22 @@ async def run() -> None:
     )
     server = uvicorn.Server(config)
 
-    bot_task = asyncio.create_task(run_bot(runtime))
     web_task = asyncio.create_task(server.serve())
+    telegram_webhook_task = asyncio.create_task(ensure_telegram_webhook_with_retry(runtime.telegram, runtime))
     strava_webhook_task = asyncio.create_task(runtime.strava_service.ensure_webhook_subscription_with_retry())
 
     try:
-        done, pending = await asyncio.wait(
-            {bot_task, web_task},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for task in done:
-            exc = task.exception()
-            if exc is not None:
-                raise exc
-        if bot_task in done:
-            raise RuntimeError("Telegram polling stopped unexpectedly")
-        if web_task in done:
+        await web_task
+        if not server.should_exit:
             raise RuntimeError("Web server stopped unexpectedly")
     finally:
         logger.info("Shutting down application runtime")
         server.should_exit = True
-        for task in (bot_task, web_task, strava_webhook_task):
+        for task in (web_task, telegram_webhook_task, strava_webhook_task):
             if not task.done():
                 task.cancel()
-        await asyncio.gather(bot_task, web_task, strava_webhook_task, return_exceptions=True)
+        await asyncio.gather(web_task, telegram_webhook_task, strava_webhook_task, return_exceptions=True)
+        await close_bot(runtime.telegram)
         await runtime.engine.dispose()
 
 

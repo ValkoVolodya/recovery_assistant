@@ -142,7 +142,7 @@ Run the app:
 uv run python main.py
 ```
 
-This starts both Telegram bot polling and the FastAPI server.
+This starts the FastAPI server and configures Telegram via webhook.
 If `PORT` is set by the platform, the app uses it automatically.
 
 ## Render
@@ -175,7 +175,7 @@ Notes for Render:
 
 - the app already exposes `GET /health` for Render health checks
 - this deployment shape is intended for a single instance MVP
-- do not horizontally scale it while Telegram polling and webhook ingestion run in the same process
+- Telegram and Strava both use webhooks, so `APP_BASE_URL` must be a public `https` URL
 
 ## Docker
 
@@ -229,6 +229,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/recovery_assistant
 ## HTTP endpoints
 
 - `GET /health`
+- `POST /telegram/webhook`
 - `GET /strava/connect?telegram_user_id=<id>`
 - `GET /strava/oauth/callback`
 - `GET /strava/webhook`

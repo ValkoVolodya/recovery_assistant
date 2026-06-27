@@ -1,5 +1,6 @@
 import logging
 
+from aiogram.types import Update
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
@@ -14,6 +15,13 @@ def create_app(runtime: AppRuntime) -> FastAPI:
 
     @app.get("/health")
     async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.post("/telegram/webhook")
+    async def telegram_webhook(request: Request) -> dict[str, str]:
+        payload = await request.json()
+        update = Update.model_validate(payload, context={"bot": runtime.telegram.bot})
+        await runtime.telegram.dispatcher.feed_update(runtime.telegram.bot, update)
         return {"status": "ok"}
 
     @app.get("/strava/connect")
