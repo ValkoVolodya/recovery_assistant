@@ -22,6 +22,7 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
         runtime = SimpleNamespace(
             settings=SimpleNamespace(app_host="127.0.0.1", app_port=8000),
             engine=SimpleNamespace(dispose=self._async_noop),
+            strava_service=SimpleNamespace(ensure_webhook_subscription_with_retry=self._neverending_task),
         )
         serve_started = asyncio.Event()
         serve_cancelled = asyncio.Event()
@@ -59,3 +60,6 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
     async def _async_noop(self) -> None:
         return None
+
+    async def _neverending_task(self) -> None:
+        await asyncio.Future()

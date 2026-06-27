@@ -241,7 +241,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/recovery_assistant
 3. Set the OAuth redirect URI to `STRAVA_REDIRECT_URI`.
 4. Expose the local app publicly, for example through `ngrok`.
 5. Run `/connect_strava` in Telegram and authorize your Strava account.
-6. Create a Strava webhook subscription pointing to `https://<public-host>/strava/webhook`.
+6. Deploy or restart the app so it can register the Strava webhook subscription automatically.
 7. Record a test ride and verify it appears in `/last_workout`.
 
 ## Notes

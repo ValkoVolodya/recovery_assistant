@@ -23,6 +23,7 @@ async def run() -> None:
 
     bot_task = asyncio.create_task(run_bot(runtime))
     web_task = asyncio.create_task(server.serve())
+    strava_webhook_task = asyncio.create_task(runtime.strava_service.ensure_webhook_subscription_with_retry())
 
     try:
         done, pending = await asyncio.wait(
@@ -40,10 +41,10 @@ async def run() -> None:
     finally:
         logger.info("Shutting down application runtime")
         server.should_exit = True
-        for task in (bot_task, web_task):
+        for task in (bot_task, web_task, strava_webhook_task):
             if not task.done():
                 task.cancel()
-        await asyncio.gather(bot_task, web_task, return_exceptions=True)
+        await asyncio.gather(bot_task, web_task, strava_webhook_task, return_exceptions=True)
         await runtime.engine.dispose()
 
 

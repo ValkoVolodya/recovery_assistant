@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import logging
@@ -23,6 +24,7 @@ from app.services.app_services import WorkoutService
 STRAVA_OAUTH_URL = "https://www.strava.com/oauth/authorize"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
 STRAVA_API_BASE_URL = "https://www.strava.com/api/v3"
+STRAVA_PUSH_SUBSCRIPTIONS_URL = f"{STRAVA_API_BASE_URL}/push_subscriptions"
 ACCESS_TOKEN_REFRESH_BUFFER = timedelta(minutes=5)
 
 logger = logging.getLogger(__name__)
@@ -44,6 +46,12 @@ class StravaConnectionStatus:
     connected: bool
     needs_reconnect: bool
     message: str
+
+
+@dataclass
+class StravaPushSubscription:
+    id: int
+    callback_url: str
 
 
 class StravaClient:
@@ -110,6 +118,53 @@ class StravaClient:
             response.raise_for_status()
             return response.json()
 
+    async def list_push_subscriptions(self) -> list[StravaPushSubscription]:
+        self._assert_configured()
+        params = {
+            "client_id": self._settings.strava_client_id,
+            "client_secret": self._settings.strava_client_secret,
+        }
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(STRAVA_PUSH_SUBSCRIPTIONS_URL, params=params)
+            response.raise_for_status()
+            payload = response.json()
+        subscriptions: list[StravaPushSubscription] = []
+        for item in payload:
+            subscriptions.append(
+                StravaPushSubscription(
+                    id=int(item["id"]),
+                    callback_url=str(item["callback_url"]),
+                )
+            )
+        return subscriptions
+
+    async def create_push_subscription(self, callback_url: str) -> StravaPushSubscription:
+        self._assert_configured()
+        payload = {
+            "client_id": self._settings.strava_client_id,
+            "client_secret": self._settings.strava_client_secret,
+            "callback_url": callback_url,
+            "verify_token": self._settings.strava_verify_token,
+        }
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(STRAVA_PUSH_SUBSCRIPTIONS_URL, data=payload)
+            response.raise_for_status()
+            subscription = response.json()
+        return StravaPushSubscription(
+            id=int(subscription["id"]),
+            callback_url=callback_url,
+        )
+
+    async def delete_push_subscription(self, subscription_id: int) -> None:
+        self._assert_configured()
+        params = {
+            "client_id": self._settings.strava_client_id,
+            "client_secret": self._settings.strava_client_secret,
+        }
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.delete(f"{STRAVA_PUSH_SUBSCRIPTIONS_URL}/{subscription_id}", params=params)
+            response.raise_for_status()
+
     def _assert_configured(self) -> None:
         if not self.is_configured():
             raise RuntimeError("Strava configuration is incomplete")
@@ -132,6 +187,70 @@ class StravaService:
 
     def build_connect_url(self, telegram_user_id: int) -> str:
         return self._client.build_connect_url(telegram_user_id)
+
+    def get_webhook_callback_url(self) -> str:
+        app_base_url = self._settings.app_base_url
+        if app_base_url is None:
+            raise RuntimeError("APP_BASE_URL is not configured")
+        return f"{app_base_url.rstrip('/')}/strava/webhook"
+
+    async def ensure_webhook_subscription(self) -> None:
+        if not self.is_configured():
+            logger.info("Skipping Strava webhook subscription setup because Strava is not fully configured")
+            return
+
+        callback_url = self.get_webhook_callback_url()
+        subscriptions = await self._client.list_push_subscriptions()
+        matching_subscription = next(
+            (subscription for subscription in subscriptions if subscription.callback_url == callback_url),
+            None,
+        )
+        if matching_subscription is not None and len(subscriptions) == 1:
+            logger.info(
+                "Strava webhook subscription already configured id=%s callback_url=%s",
+                matching_subscription.id,
+                matching_subscription.callback_url,
+            )
+            return
+
+        for subscription in subscriptions:
+            logger.info(
+                "Deleting stale Strava webhook subscription id=%s callback_url=%s",
+                subscription.id,
+                subscription.callback_url,
+            )
+            await self._client.delete_push_subscription(subscription.id)
+
+        subscription = await self._client.create_push_subscription(callback_url)
+        logger.info(
+            "Created Strava webhook subscription id=%s callback_url=%s",
+            subscription.id,
+            subscription.callback_url,
+        )
+
+    async def ensure_webhook_subscription_with_retry(
+        self,
+        *,
+        initial_delay_seconds: float = 5.0,
+        max_attempts: int = 5,
+        retry_delay_seconds: float = 15.0,
+    ) -> None:
+        if initial_delay_seconds > 0:
+            await asyncio.sleep(initial_delay_seconds)
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await self.ensure_webhook_subscription()
+                return
+            except Exception:
+                logger.exception(
+                    "Failed to ensure Strava webhook subscription on attempt %s/%s",
+                    attempt,
+                    max_attempts,
+                )
+                if attempt == max_attempts:
+                    return
+                await asyncio.sleep(retry_delay_seconds)
 
     async def get_connection_status(self, telegram_user_id: int) -> StravaConnectionStatus:
         async with self._session_factory() as session:
