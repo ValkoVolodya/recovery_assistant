@@ -1,10 +1,13 @@
 import asyncio
+import logging
 
 import uvicorn
 
 from app.bot.runner import run_bot
 from app.runtime import build_runtime
 from app.web import create_app
+
+logger = logging.getLogger(__name__)
 
 
 async def run() -> None:
@@ -24,13 +27,18 @@ async def run() -> None:
     try:
         done, pending = await asyncio.wait(
             {bot_task, web_task},
-            return_when=asyncio.FIRST_EXCEPTION,
+            return_when=asyncio.FIRST_COMPLETED,
         )
         for task in done:
             exc = task.exception()
             if exc is not None:
                 raise exc
+        if bot_task in done:
+            raise RuntimeError("Telegram polling stopped unexpectedly")
+        if web_task in done:
+            raise RuntimeError("Web server stopped unexpectedly")
     finally:
+        logger.info("Shutting down application runtime")
         server.should_exit = True
         for task in (bot_task, web_task):
             if not task.done():
