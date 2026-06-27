@@ -4,6 +4,7 @@ import logging
 import uvicorn
 
 from app.bot.runner import run_bot
+from app.logging_config import configure_logging
 from app.runtime import build_runtime
 from app.web import create_app
 
@@ -49,4 +50,5 @@ async def run() -> None:
 
 
 def main() -> None:
+    configure_logging()
     asyncio.run(run())
