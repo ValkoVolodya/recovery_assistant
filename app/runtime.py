@@ -9,6 +9,7 @@ from app.db.session import create_engine, create_session_factory
 from app.services.app_services import ProfileService, WorkoutService
 from app.services.recommendations import RecoveryRecommendationService
 from app.services.strava import StravaService
+from app.services.telegram import TelegramNotificationService
 
 
 @dataclass
@@ -27,8 +28,9 @@ def build_runtime() -> AppRuntime:
     engine = create_engine(settings.database_url)
     session_factory = create_session_factory(engine)
     recommendation_service = RecoveryRecommendationService()
+    telegram_notification_service = TelegramNotificationService(settings)
     profile_service = ProfileService(session_factory)
-    workout_service = WorkoutService(session_factory, recommendation_service)
+    workout_service = WorkoutService(session_factory, recommendation_service, telegram_notification_service)
     strava_service = StravaService(settings, session_factory, workout_service)
     runtime = AppRuntime(
         settings=settings,
