@@ -24,14 +24,17 @@ def workout_summary_text(workout: Workout, recommendation: RecoveryRecommendatio
         else f"{recommendation.carbs_min_g}-{recommendation.carbs_max_g} г"
     )
     return (
-        "Останнє тренування\n"
-        f"Тривалість: {workout.duration_minutes} хв\n"
-        f"Робота: {workout.kilojoules} кДж\n"
-        f"Інтенсивність: {intensity_label(workout.intensity)}\n\n"
-        f"Вуглеводи: {carbs_text}\n"
-        f"Білок: {recommendation.protein_min_g}-{recommendation.protein_max_g} г\n"
-        f"Рідина: {recommendation.fluids_ml_min}-{recommendation.fluids_ml_max} мл\n"
-        f"Натрій: {recommendation.sodium_mg_min}-{recommendation.sodium_mg_max} мг\n\n"
+        "🚴 Тренування збережено\n\n"
+        "📊 Навантаження\n"
+        f"• Тривалість: {workout.duration_minutes} хв\n"
+        f"• Робота: {workout.kilojoules} кДж\n"
+        f"• Інтенсивність: {intensity_label(workout.intensity)}\n\n"
+        "🥤 Відновлення\n"
+        f"• Вуглеводи: {carbs_text}\n"
+        f"• Білок: {recommendation.protein_min_g}-{recommendation.protein_max_g} г\n"
+        f"• Рідина: {recommendation.fluids_ml_min}-{recommendation.fluids_ml_max} мл\n"
+        f"• Натрій: {recommendation.sodium_mg_min}-{recommendation.sodium_mg_max} мг\n\n"
+        "📝 Порада\n"
         f"{recommendation.explanation}"
     )
 

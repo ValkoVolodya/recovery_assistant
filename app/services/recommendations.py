@@ -1,3 +1,5 @@
+import random
+
 from app.domain.enums import Intensity
 from app.dto.recovery import RecoveryRecommendation
 from app.dto.workout import WorkoutInput
@@ -70,8 +72,9 @@ class RecoveryRecommendationService:
         if carbs_target_g == 0:
             return (
                 f"{self._intensity_label(workout.intensity)} поїздка: "
-                f"окремо добирати вуглеводи після неї не обов'язково. "
-                f"Зосередься на звичайному прийомі їжі, рідині і {protein_text} протеїну."
+                "окремо добирати вуглеводи після неї не обов'язково. "
+                f"Зосередься на звичайному прийомі їжі, рідині і {protein_text} протеїну. "
+                f"Ідея для відновлення: {self._recovery_meal_example(carbs_target_g)}."
             )
 
         carb_example = self._carb_example(carbs_target_g)
@@ -104,13 +107,75 @@ class RecoveryRecommendationService:
         return carbs_target_rounded
 
     def _carb_example(self, carbs_target_g: int) -> str:
+        return random.choice(self._carb_examples(carbs_target_g))
+
+    def _recovery_meal_example(self, carbs_target_g: int) -> str:
+        return random.choice(self._recovery_meal_examples(carbs_target_g))
+
+    def _carb_examples(self, carbs_target_g: int) -> list[str]:
         if carbs_target_g <= 40:
-            return "банан і питний йогурт"
+            return [
+                "банан і питний йогурт",
+                "йогурт з ягодами і гранолою",
+                "рисові хлібці з медом і кефір",
+                "вівсянка швидкого приготування з бананом",
+            ]
         if carbs_target_g <= 60:
-            return "банан, солодкий батончик або 2 тости з джемом"
+            return [
+                "банан, солодкий батончик або 2 тости з джемом",
+                "сендвіч із джемом і склянка соку",
+                "вівсянка з медом і бананом",
+                "рисовий пудинг і фрукт",
+            ]
         if carbs_target_g <= 90:
-            return "бейгл з медом, рисовий пудинг або велика порція пластівців із молоком"
-        return "велика порція рису, пасти або 2 бейгли з джемом"
+            return [
+                "булка з медом, рисовий пудинг або велика порція пластівців із молоком",
+                "велика миска пластівців із молоком і бананом",
+                "два тости з джемом, йогурт і сік",
+                "рис, фруктовий йогурт і банан",
+            ]
+        return [
+            "велика порція рису, пасти або 2 тости з джемом",
+            "паста з томатним соусом і солодкий напій",
+            "велика порція рису з фруктом і йогуртом",
+            "солодка булка з медом, банан і шоколадне молоко",
+        ]
+
+    def _recovery_meal_examples(self, carbs_target_g: int) -> list[str]:
+        if carbs_target_g == 0:
+            return [
+                "омлет і тост, плюс вода",
+                "грецький йогурт з ягодами",
+                "сир кисломолочний і фрукт",
+                "сендвіч з яйцем і чай",
+            ]
+        if carbs_target_g <= 40:
+            return [
+                "банан, йогурт і вода",
+                "вівсянка з ягодами",
+                "рисові хлібці з медом і питний йогурт",
+                "кефір і булочка з джемом",
+            ]
+        if carbs_target_g <= 60:
+            return [
+                "вівсянка з бананом і медом",
+                "сендвіч з джемом і йогурт",
+                "рисовий пудинг і фрукт",
+                "тости з медом і шоколадне молоко",
+            ]
+        if carbs_target_g <= 90:
+            return [
+                "булка з медом, банан і йогурт",
+                "велика миска пластівців із молоком",
+                "рис з фруктами і питний йогурт",
+                "два тости з джемом і рисовий пудинг",
+            ]
+        return [
+            "велика тарілка рису і солодкий йогурт",
+            "паста, банан і напій з вуглеводами",
+            "два тости з джемом і шоколадне молоко",
+            "велика порція пластівців, тости з медом і фрукт",
+        ]
 
     def _round_to_5(self, value: float) -> int:
         return int(round(value / 5) * 5)
