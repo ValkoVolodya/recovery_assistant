@@ -49,10 +49,9 @@ class RecommendationPresentationTests(unittest.TestCase):
 
         text = messages.workout_summary_text(workout, recommendation)
 
-        self.assertIn("🚴 Тренування збережено", text)
-        self.assertIn("📊 Навантаження", text)
-        self.assertIn("🥤 Відновлення", text)
-        self.assertIn("📝 Порада", text)
+        self.assertIn("✅ План відновлення", text)
+        self.assertIn("📝 Що робити", text)
+        self.assertIn("📌 Деталі тренування", text)
 
     def test_carb_example_uses_variant_pool(self) -> None:
         recommendations = _load_recommendations_module()
@@ -62,3 +61,25 @@ class RecommendationPresentationTests(unittest.TestCase):
             example = service._carb_example(35)
 
         self.assertEqual(example, "вівсянка швидкого приготування з бананом")
+
+    def test_explanation_highlights_carb_timing_only(self) -> None:
+        recommendations = _load_recommendations_module()
+        service = recommendations.RecoveryRecommendationService()
+
+        with patch.object(recommendations.random, "choice", side_effect=lambda options: options[0]):
+            explanation = service._build_explanation(
+                workout=SimpleNamespace(intensity=Intensity.MODERATE),
+                carbs_target_g=60,
+                protein_min_g=20,
+                protein_max_g=25,
+                fluids_ml_min=900,
+                fluids_ml_max=1300,
+                sodium_mg_min=500,
+                sodium_mg_max=900,
+            )
+
+        self.assertIn("У перші 10 хв після тренування обов'язково з'їж 60 г вуглеводів.", explanation)
+        self.assertIn("протягом 2-3 годин", explanation)
+        self.assertIn("20-25 г протеїну", explanation)
+        self.assertIn("900-1300 мл рідини", explanation)
+        self.assertIn("500-900 мг натрію", explanation)

@@ -53,6 +53,10 @@ class RecoveryRecommendationService:
                 carbs_target_g=carbs_target_g,
                 protein_min_g=protein_min_g,
                 protein_max_g=protein_max_g,
+                fluids_ml_min=self._round_to_50(max(400, fluids_base + fluids_load)),
+                fluids_ml_max=self._round_to_50(max(700, fluids_base + fluids_load + 400)),
+                sodium_mg_min=self._round_to_50(sodium_min),
+                sodium_mg_max=self._round_to_50(sodium_max),
             ),
         )
         return recommendation
@@ -63,25 +67,31 @@ class RecoveryRecommendationService:
         carbs_target_g: int,
         protein_min_g: int,
         protein_max_g: int,
+        fluids_ml_min: int,
+        fluids_ml_max: int,
+        sodium_mg_min: int,
+        sodium_mg_max: int,
     ) -> str:
         protein_text = (
             f"{protein_min_g} г"
             if protein_min_g == protein_max_g
             else f"{protein_min_g}-{protein_max_g} г"
         )
+        fluids_text = f"{fluids_ml_min}-{fluids_ml_max} мл"
+        sodium_text = f"{sodium_mg_min}-{sodium_mg_max} мг"
         if carbs_target_g == 0:
             return (
                 f"{self._intensity_label(workout.intensity)} поїздка: "
                 "окремо добирати вуглеводи після неї не обов'язково. "
-                f"Зосередься на звичайному прийомі їжі, рідині і {protein_text} протеїну. "
+                f"Зосередься на звичайному прийомі їжі, а {protein_text} протеїну, {fluids_text} рідини і {sodium_text} натрію добери спокійно протягом 2-3 годин. "
                 f"Ідея для відновлення: {self._recovery_meal_example(carbs_target_g)}."
             )
 
         carb_example = self._carb_example(carbs_target_g)
         return (
             f"{self._intensity_label(workout.intensity)} поїздка: "
-            f"у перші 10 хв після тренування треба з'їсти {carbs_target_g} г вуглеводів. "
-            f"Також не забудь з'їсти {protein_text} протеїну. "
+            f"У перші 10 хв після тренування обов'язково з'їж {carbs_target_g} г вуглеводів. "
+            f"{protein_text} протеїну, {fluids_text} рідини і {sodium_text} натрію добери вже без поспіху протягом 2-3 годин. "
             f"Наприклад: {carb_example}."
         )
 

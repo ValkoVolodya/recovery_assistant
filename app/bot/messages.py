@@ -15,27 +15,14 @@ def profile_text(user: User) -> str:
 
 
 def workout_summary_text(workout: Workout, recommendation: RecoveryRecommendation) -> str:
-    carbs_text = (
-        "не обов'язково окремо добирати"
-        if recommendation.carbs_min_g == 0 and recommendation.carbs_max_g == 0
-        else
-        f"{recommendation.carbs_min_g} г"
-        if recommendation.carbs_min_g == recommendation.carbs_max_g
-        else f"{recommendation.carbs_min_g}-{recommendation.carbs_max_g} г"
-    )
     return (
-        "🚴 Тренування збережено\n\n"
-        "📊 Навантаження\n"
+        "✅ План відновлення\n\n"
+        "📝 Що робити\n"
+        f"{recommendation.explanation}\n\n"
+        "📌 Деталі тренування\n"
+        f"• Інтенсивність: {intensity_label(workout.intensity)}\n"
         f"• Тривалість: {workout.duration_minutes} хв\n"
-        f"• Робота: {workout.kilojoules} кДж\n"
-        f"• Інтенсивність: {intensity_label(workout.intensity)}\n\n"
-        "🥤 Відновлення\n"
-        f"• Вуглеводи: {carbs_text}\n"
-        f"• Білок: {recommendation.protein_min_g}-{recommendation.protein_max_g} г\n"
-        f"• Рідина: {recommendation.fluids_ml_min}-{recommendation.fluids_ml_max} мл\n"
-        f"• Натрій: {recommendation.sodium_mg_min}-{recommendation.sodium_mg_max} мг\n\n"
-        "📝 Порада\n"
-        f"{recommendation.explanation}"
+        f"• Робота: {workout.kilojoules} кДж"
     )
 
 
