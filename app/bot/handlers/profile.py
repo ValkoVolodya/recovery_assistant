@@ -4,8 +4,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app.bot.fsm import SetWeightStates
-from app.bot.messages import format_weight, profile_text
+from app.bot.messages import format_weight, post_weight_next_step_text, profile_text
 from app.services.app_services import ProfileService
+from app.services.strava import StravaService
 
 profile_router = Router()
 
@@ -34,6 +35,7 @@ async def set_weight_value(
     message: Message,
     state: FSMContext,
     profile_service: ProfileService,
+    strava_service: StravaService,
 ) -> None:
     telegram_user = message.from_user
     if telegram_user is None or message.text is None:
@@ -56,4 +58,12 @@ async def set_weight_value(
         weight_kg=weight,
     )
     await state.clear()
-    await message.answer(f"Вагу оновлено: {format_weight(user.weight_kg)}.")
+    connect_url = None
+    if strava_service.is_configured():
+        connect_url = strava_service.build_connect_url(telegram_user.id)
+    await message.answer(
+        post_weight_next_step_text(
+            weight_text=format_weight(user.weight_kg),
+            strava_connect_url=connect_url,
+        )
+    )

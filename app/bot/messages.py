@@ -14,6 +14,38 @@ def profile_text(user: User) -> str:
     return "\n".join(lines)
 
 
+def onboarding_welcome_text(*, has_weight: bool) -> str:
+    if has_weight:
+        return (
+            "👋 Вітаю в Recovery Assistant.\n\n"
+            "Я допомагаю після тренувань: підтягую поїздки зі Strava і одразу надсилаю план відновлення.\n\n"
+            "Що далі:\n"
+            "1. Підключи Strava\n"
+            "2. Після наступної поїздки я сам надішлю рекомендацію\n\n"
+            "Команди: /profile, /set_weight, /connect_strava, /last_workout."
+        )
+    return (
+        "👋 Вітаю в Recovery Assistant.\n\n"
+        "Я допомагаю після тренувань: підтягую поїздки зі Strava і одразу надсилаю план відновлення.\n\n"
+        "Налаштуємо все за хвилину.\n"
+        "Крок 1 з 2: надішли свою вагу в кг, наприклад `72.5`."
+    )
+
+
+def post_weight_next_step_text(*, weight_text: str, strava_connect_url: str | None) -> str:
+    if strava_connect_url is None:
+        return (
+            f"✅ Вагу збережено: {weight_text}.\n\n"
+            "Крок 2 з 2: підключи Strava командою /connect_strava, коли вона буде налаштована."
+        )
+    return (
+        f"✅ Вагу збережено: {weight_text}.\n\n"
+        "Крок 2 з 2: підключи Strava за цим посиланням:\n"
+        f"{strava_connect_url}\n\n"
+        "Після наступної поїздки я сам надішлю рекомендацію в чат."
+    )
+
+
 def workout_summary_text(workout: Workout, recommendation: RecoveryRecommendation) -> str:
     return (
         "✅ План відновлення\n\n"
