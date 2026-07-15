@@ -32,6 +32,15 @@ def _load_recommendations_module():
 
 
 class RecommendationPresentationTests(unittest.TestCase):
+    def test_profile_text_shows_ftp_when_present(self) -> None:
+        messages = _load_messages_module()
+        user = SimpleNamespace(first_name="V", username="vv", weight_kg=72.5, ftp_watts=265)
+
+        text = messages.profile_text(user)
+
+        self.assertIn("Вага: 72.5 кг", text)
+        self.assertIn("FTP: 265 Вт", text)
+
     def test_workout_summary_text_is_structured(self) -> None:
         messages = _load_messages_module()
         workout = SimpleNamespace(duration_minutes=95, kilojoules=1100, intensity=Intensity.MODERATE)
@@ -69,7 +78,8 @@ class RecommendationPresentationTests(unittest.TestCase):
         with patch.object(recommendations.random, "choice", side_effect=lambda options: options[0]):
             explanation = service._build_explanation(
                 workout=SimpleNamespace(intensity=Intensity.MODERATE),
-                carbs_target_g=60,
+                carbs_min_g=50,
+                carbs_max_g=55,
                 protein_min_g=20,
                 protein_max_g=25,
                 fluids_ml_min=900,
@@ -78,8 +88,22 @@ class RecommendationPresentationTests(unittest.TestCase):
                 sodium_mg_max=900,
             )
 
-        self.assertIn("У перші 10 хв після тренування обов'язково з'їж 60 г вуглеводів.", explanation)
+        self.assertIn("У перші 10 хв після тренування обов'язково з'їж 50-55 г вуглеводів.", explanation)
         self.assertIn("протягом 2-3 годин", explanation)
         self.assertIn("20-25 г протеїну", explanation)
         self.assertIn("900-1300 мл рідини", explanation)
         self.assertIn("500-900 мг натрію", explanation)
+
+    def test_carbs_range_comes_from_rule_table_with_ftp_based_tss_per_hour(self) -> None:
+        recommendations = _load_recommendations_module()
+        service = recommendations.RecoveryRecommendationService()
+        workout = SimpleNamespace(
+            duration_minutes=95,
+            kilojoules=1100,
+            weighted_average_watts=240,
+            intensity=Intensity.MODERATE,
+        )
+
+        carbs_min_g, carbs_max_g = service._carbs_range(workout, weight_kg=70.0, ftp_watts=280)
+
+        self.assertEqual((carbs_min_g, carbs_max_g), (50, 55))

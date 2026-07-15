@@ -45,3 +45,7 @@ class StravaConnectionRepository:
             connection.expires_at = expires_at
         await self._session.flush()
         return connection
+
+    async def delete(self, connection: StravaConnection) -> None:
+        await self._session.delete(connection)
+        await self._session.flush()

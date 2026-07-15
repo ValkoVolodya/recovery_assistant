@@ -28,3 +28,13 @@ async def connect_strava_command(message: Message, strava_service: StravaService
         "Відкрий це посилання, авторизуй Strava і повернись у бот:\n"
         f"{connect_url}"
     )
+
+
+@strava_router.message(Command("disconnect_strava"))
+async def disconnect_strava_command(message: Message, strava_service: StravaService) -> None:
+    telegram_user = message.from_user
+    if telegram_user is None:
+        return
+
+    result = await strava_service.disconnect_athlete(telegram_user.id)
+    await message.answer(result.message)

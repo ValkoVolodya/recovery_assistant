@@ -223,7 +223,9 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/recovery_assistant
 - `/start`
 - `/profile`
 - `/set_weight`
+- `/set_ftp`
 - `/connect_strava`
+- `/disconnect_strava`
 - `/last_workout`
 
 ## HTTP endpoints
@@ -249,6 +251,7 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/recovery_assistant
 
 - Telegram handlers are thin and delegate to application services.
 - `WorkoutInput` is the shared DTO for workout ingestion, so Strava can submit workouts without changing business logic.
-- Carbohydrates are currently calculated with a single simple formula: about `1 g` per `4 kJ` of completed work.
+- Carbohydrates are calculated from an in-code duration x `TSS/hour` rule table.
+- `TSS/hour` is estimated from `weighted_average_watts / FTP` when both are available; otherwise the app falls back to the workout intensity bucket.
 - The `goal` field remains in the database for now, but the bot no longer exposes goal-related functionality.
 - Webhook ingestion currently processes only Strava `activity` `create` events.

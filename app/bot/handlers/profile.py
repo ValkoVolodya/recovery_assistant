@@ -3,8 +3,8 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from app.bot.fsm import SetWeightStates
-from app.bot.messages import format_weight, post_weight_next_step_text, profile_text
+from app.bot.fsm import SetFtpStates, SetWeightStates
+from app.bot.messages import format_ftp, format_weight, post_weight_next_step_text, profile_text
 from app.services.app_services import ProfileService
 from app.services.strava import StravaService
 
@@ -28,6 +28,12 @@ async def profile_command(message: Message, profile_service: ProfileService) -> 
 async def set_weight_command(message: Message, state: FSMContext) -> None:
     await state.set_state(SetWeightStates.waiting_for_weight)
     await message.answer("Надішліть вагу в кг, наприклад: 72.5")
+
+
+@profile_router.message(Command("set_ftp"))
+async def set_ftp_command(message: Message, state: FSMContext) -> None:
+    await state.set_state(SetFtpStates.waiting_for_ftp)
+    await message.answer("Надішліть FTP у ватах, наприклад: 265")
 
 
 @profile_router.message(SetWeightStates.waiting_for_weight)
@@ -67,3 +73,33 @@ async def set_weight_value(
             strava_connect_url=connect_url,
         )
     )
+
+
+@profile_router.message(SetFtpStates.waiting_for_ftp)
+async def set_ftp_value(
+    message: Message,
+    state: FSMContext,
+    profile_service: ProfileService,
+) -> None:
+    telegram_user = message.from_user
+    if telegram_user is None or message.text is None:
+        return
+
+    try:
+        ftp_watts = int(message.text.strip())
+    except ValueError:
+        await message.answer("FTP має бути цілим числом у ватах.")
+        return
+
+    if not 100 <= ftp_watts <= 600:
+        await message.answer("FTP має бути в межах від 100 до 600 Вт.")
+        return
+
+    user = await profile_service.set_ftp(
+        telegram_user_id=telegram_user.id,
+        username=telegram_user.username,
+        first_name=telegram_user.first_name,
+        ftp_watts=ftp_watts,
+    )
+    await state.clear()
+    await message.answer(f"✅ FTP збережено: {format_ftp(user.ftp_watts)}.")

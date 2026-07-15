@@ -36,6 +36,7 @@ class User(Base, TimestampMixin):
     username: Mapped[str | None] = mapped_column(String(255))
     first_name: Mapped[str] = mapped_column(String(255), nullable=False)
     weight_kg: Mapped[float | None] = mapped_column(Numeric(5, 2))
+    ftp_watts: Mapped[int | None] = mapped_column(Integer)
     goal: Mapped[Goal] = mapped_column(
         Enum(Goal, name="goal_enum", values_callable=enum_values),
         default=Goal.MAINTENANCE,

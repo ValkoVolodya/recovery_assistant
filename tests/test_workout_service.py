@@ -100,7 +100,9 @@ class WorkoutServiceTests(unittest.IsolatedAsyncioTestCase):
         notifier = FakeNotifier()
         service = app_services.WorkoutService(
             session_factory=lambda: FakeSessionContext(FakeSession()),
-            recommendation_service=SimpleNamespace(recommend=lambda workout, weight_kg: fake_recommendation),
+            recommendation_service=SimpleNamespace(
+                recommend=lambda workout, weight_kg, ftp_watts=None: fake_recommendation
+            ),
             telegram_notification_service=notifier,
         )
 

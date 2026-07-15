@@ -51,6 +51,20 @@ class ProfileService:
             await session.commit()
             return user
 
+    async def set_ftp(
+        self,
+        telegram_user_id: int,
+        username: str | None,
+        first_name: str,
+        ftp_watts: int,
+    ) -> User:
+        async with self._session_factory() as session:
+            repo = UserRepository(session)
+            user = await repo.create_or_update_identity(telegram_user_id, username, first_name)
+            await repo.update_ftp(user, ftp_watts)
+            await session.commit()
+            return user
+
 class WorkoutService:
     def __init__(
         self,
@@ -78,6 +92,7 @@ class WorkoutService:
             recommendation = self._recommendation_service.recommend(
                 workout=workout_input,
                 weight_kg=self._to_float(user.weight_kg),
+                ftp_watts=getattr(user, "ftp_watts", None),
             )
             workout = Workout(
                 user_id=user.id,

@@ -23,6 +23,7 @@ from app.services.app_services import WorkoutService
 
 STRAVA_OAUTH_URL = "https://www.strava.com/oauth/authorize"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
+STRAVA_REVOKE_URL = "https://www.strava.com/oauth/revoke"
 STRAVA_API_BASE_URL = "https://www.strava.com/api/v3"
 STRAVA_PUSH_SUBSCRIPTIONS_URL = f"{STRAVA_API_BASE_URL}/push_subscriptions"
 ACCESS_TOKEN_REFRESH_BUFFER = timedelta(minutes=5)
@@ -45,6 +46,12 @@ class StravaWebhookEvent:
 class StravaConnectionStatus:
     connected: bool
     needs_reconnect: bool
+    message: str
+
+
+@dataclass
+class StravaDisconnectResult:
+    disconnected: bool
     message: str
 
 
@@ -163,6 +170,19 @@ class StravaClient:
         }
         async with httpx.AsyncClient(timeout=20.0) as client:
             response = await client.delete(f"{STRAVA_PUSH_SUBSCRIPTIONS_URL}/{subscription_id}", params=params)
+            response.raise_for_status()
+
+    async def revoke_token(self, token: str, *, token_type_hint: str = "refresh_token") -> None:
+        self._assert_configured()
+        payload = {
+            "token": token,
+            "token_type_hint": token_type_hint,
+        }
+        async with httpx.AsyncClient(
+            timeout=20.0,
+            auth=(str(self._settings.strava_client_id), self._settings.strava_client_secret),
+        ) as client:
+            response = await client.post(STRAVA_REVOKE_URL, data=payload)
             response.raise_for_status()
 
     def _assert_configured(self) -> None:
@@ -331,6 +351,55 @@ class StravaService:
             "Strava успішно підключена. Можна їхати катати, наступне тренування підтягнеться автоматично.",
         )
 
+    async def disconnect_athlete(self, telegram_user_id: int) -> StravaDisconnectResult:
+        async with self._session_factory() as session:
+            user_repo = UserRepository(session)
+            connection_repo = StravaConnectionRepository(session)
+            user = await user_repo.get_by_telegram_user_id(telegram_user_id)
+            if user is None:
+                return StravaDisconnectResult(
+                    disconnected=False,
+                    message="Профіль ще не створено. Спочатку виконайте /start.",
+                )
+
+            connection = await connection_repo.get_by_user_id(user.id)
+            if connection is None:
+                return StravaDisconnectResult(
+                    disconnected=False,
+                    message="Strava і так не підключена.",
+                )
+
+            try:
+                await self._client.revoke_token(connection.refresh_token, token_type_hint="refresh_token")
+            except Exception:
+                logger.exception(
+                    "Failed to revoke Strava token for telegram_user_id=%s athlete_id=%s",
+                    telegram_user_id,
+                    connection.strava_athlete_id,
+                )
+                return StravaDisconnectResult(
+                    disconnected=False,
+                    message=(
+                        "Не вдалося коректно відкликати доступ Strava. Спробуй ще раз трохи пізніше."
+                    ),
+                )
+
+            athlete_id = connection.strava_athlete_id
+            await connection_repo.delete(connection)
+            await session.commit()
+            logger.info(
+                "Revoked and deleted Strava connection for telegram_user_id=%s athlete_id=%s",
+                telegram_user_id,
+                athlete_id,
+            )
+            return StravaDisconnectResult(
+                disconnected=True,
+                message=(
+                    "Strava відв'язана. Нові тренування більше не будуть імпортуватися автоматично.\n"
+                    "Щоб підключити її знову, використай /connect_strava."
+                ),
+            )
+
     async def process_webhook_event(self, payload: dict) -> None:
         try:
             event = self._parse_event(payload)
@@ -461,10 +530,16 @@ class StravaService:
         moving_time_seconds = int(activity.get("moving_time") or 0)
         duration_minutes = max(1, round(moving_time_seconds / 60))
         kilojoules = max(1, round(float(activity.get("kilojoules") or 0)))
+        weighted_average_watts = activity.get("weighted_average_watts")
         intensity = self._map_intensity(activity, duration_minutes, kilojoules)
         return WorkoutInput(
             duration_minutes=duration_minutes,
             kilojoules=kilojoules,
+            weighted_average_watts=(
+                max(1, round(float(weighted_average_watts)))
+                if weighted_average_watts is not None
+                else None
+            ),
             intensity=intensity,
         )
 

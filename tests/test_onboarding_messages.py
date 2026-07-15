@@ -35,3 +35,10 @@ class OnboardingMessageTests(unittest.TestCase):
 
         self.assertIn("Крок 2 з 2", text)
         self.assertIn("https://example.com/connect", text)
+
+    def test_welcome_text_with_weight_mentions_set_ftp_command(self) -> None:
+        messages = _load_messages_module()
+
+        text = messages.onboarding_welcome_text(has_weight=True)
+
+        self.assertIn("/set_ftp", text)

@@ -42,3 +42,8 @@ class UserRepository:
         user.weight_kg = weight_kg
         await self._session.flush()
         return user
+
+    async def update_ftp(self, user: User, ftp_watts: int) -> User:
+        user.ftp_watts = ftp_watts
+        await self._session.flush()
+        return user

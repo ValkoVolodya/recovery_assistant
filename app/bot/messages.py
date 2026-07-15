@@ -7,10 +7,12 @@ from app.dto.recovery import RecoveryRecommendation
 
 def profile_text(user: User) -> str:
     weight = format_weight(user.weight_kg)
+    ftp = format_ftp(user.ftp_watts)
     lines = ["Профіль", f"Ім'я: {user.first_name}"]
     if user.username:
         lines.append(f"Користувач: @{user.username}")
     lines.append(f"Вага: {weight}")
+    lines.append(f"FTP: {ftp}")
     return "\n".join(lines)
 
 
@@ -22,7 +24,7 @@ def onboarding_welcome_text(*, has_weight: bool) -> str:
             "Що далі:\n"
             "1. Підключи Strava\n"
             "2. Після наступної поїздки я сам надішлю рекомендацію\n\n"
-            "Команди: /profile, /set_weight, /connect_strava, /last_workout."
+            "Команди: /profile, /set_weight, /set_ftp, /connect_strava, /disconnect_strava, /last_workout."
         )
     return (
         "👋 Вітаю в Recovery Assistant.\n\n"
@@ -62,6 +64,12 @@ def format_weight(weight: Decimal | float | None) -> str:
     if weight is None:
         return "не вказано"
     return f"{float(weight):.1f} кг"
+
+
+def format_ftp(ftp_watts: int | None) -> str:
+    if ftp_watts is None:
+        return "не вказано"
+    return f"{ftp_watts} Вт"
 
 
 def intensity_label(intensity: Intensity) -> str:
