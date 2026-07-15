@@ -452,6 +452,16 @@ class StravaService:
                     logger.warning("User not found for Strava connection user_id=%s", connection.user_id)
                     return
 
+                if not self._should_import_activity(activity):
+                    logger.info(
+                        "Skipping stale Strava activity athlete_id=%s object_id=%s start_date=%s start_date_local=%s",
+                        event.owner_id,
+                        event.object_id,
+                        activity.get("start_date"),
+                        activity.get("start_date_local"),
+                    )
+                    return
+
                 workout_input = self._map_activity_to_workout(activity)
                 await self._workout_service.log_workout(
                     telegram_user_id=user.telegram_user_id,
@@ -475,6 +485,48 @@ class StravaService:
         if mode != "subscribe" or expected_token is None or token != expected_token:
             raise ValueError("Invalid Strava webhook verification request")
         return {"hub.challenge": challenge}
+
+    def _should_import_activity(self, activity: dict, now_utc: datetime | None = None) -> bool:
+        activity_end_local = self._activity_end_local(activity)
+        if activity_end_local is None:
+            return True
+
+        current_utc = now_utc or datetime.now(tz=UTC)
+        utc_offset_seconds = activity.get("utc_offset")
+        if utc_offset_seconds is not None:
+            local_today = (current_utc + timedelta(seconds=float(utc_offset_seconds))).date()
+        else:
+            local_today = current_utc.astimezone(activity_end_local.tzinfo).date()
+        return activity_end_local.date() >= local_today - timedelta(days=2)
+
+    def _activity_end_local(self, activity: dict) -> datetime | None:
+        elapsed_time_seconds = int(activity.get("elapsed_time") or activity.get("moving_time") or 0)
+        if elapsed_time_seconds < 0:
+            elapsed_time_seconds = 0
+
+        utc_offset_seconds = activity.get("utc_offset")
+        start_date = self._parse_strava_datetime(activity.get("start_date"))
+        if start_date is not None and utc_offset_seconds is not None:
+            return start_date + timedelta(seconds=elapsed_time_seconds + float(utc_offset_seconds))
+
+        start_date_local = self._parse_strava_datetime(activity.get("start_date_local"))
+        if start_date_local is not None:
+            return start_date_local + timedelta(seconds=elapsed_time_seconds)
+
+        if start_date is not None:
+            return start_date + timedelta(seconds=elapsed_time_seconds)
+
+        return None
+
+    def _parse_strava_datetime(self, value: str | None) -> datetime | None:
+        if not value:
+            return None
+
+        normalized = value.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed
 
     async def _ensure_fresh_access_token(
         self,

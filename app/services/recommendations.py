@@ -129,15 +129,15 @@ class RecoveryRecommendationService:
             return (
                 f"{self._intensity_label(workout.intensity)} поїздка: "
                 "окремо добирати вуглеводи після неї не обов'язково. "
-                f"Зосередься на звичайному прийомі їжі, а {protein_text} протеїну, {fluids_text} рідини і {sodium_text} натрію добери спокійно протягом 2-3 годин. "
+                f"Зосередься на звичайному прийомі їжі, а {protein_text} протеїну, {fluids_text} рідини і {sodium_text} натрію добери спокійно протягом 2-3 годин. \n"
                 f"Ідея для відновлення: {self._recovery_meal_example(carbs_max_g)}."
             )
 
         carb_example = self._carb_example(carbs_max_g)
         return (
             f"{self._intensity_label(workout.intensity)} поїздка: "
-            f"У перші 10 хв після тренування обов'язково з'їж {carbs_text} вуглеводів. "
-            f"{protein_text} протеїну, {fluids_text} рідини і {sodium_text} натрію добери вже без поспіху протягом 2-3 годин. "
+            f"У перші 10 хв після тренування обов'язково з'їж {carbs_text} вуглеводів. \n"
+            f"{protein_text} протеїну, {fluids_text} рідини і {sodium_text} натрію добери вже без поспіху протягом 2-3 годин. \n"
             f"Наприклад: {carb_example}."
         )
 
